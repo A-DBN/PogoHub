@@ -137,11 +137,23 @@ export async function ingestLeagues(gameMaster?: GameMaster): Promise<LeagueInge
     }
   }
 
-  // une ligue sans aucun classement (championshipseries, custom…) reste masquée
-  const empty = await prisma.league.findMany({
-    where: { tier: { not: 'CUSTOM' }, entries: { none: {} } },
-    select: { id: true, key: true },
-  });
+  /*
+   * Une ligue sans aucun classement (championshipseries, custom…) reste masquée.
+   *
+   * Mais sur une base neuve **aucune** ligue n'a encore d'entrée : la méta ne
+   * tourne qu'après. Masquer ici reviendrait à toutes les éteindre, et
+   * `ingestMeta` — qui ne regarde que les ligues actives — n'en trouverait
+   * aucune. Le classement resterait vide pour toujours. On ne balaie donc que
+   * si la méta a déjà tourné au moins une fois ; sinon on laisse `ingestMeta`
+   * faire ce tri lui-même, à la fin, quand la question a un sens.
+   */
+  const seeded = await prisma.metaEntry.count();
+  const empty = seeded
+    ? await prisma.league.findMany({
+        where: { tier: { not: 'CUSTOM' }, entries: { none: {} } },
+        select: { id: true, key: true },
+      })
+    : [];
   if (empty.length) {
     await prisma.league.updateMany({
       where: { id: { in: empty.map((l) => l.id) } },

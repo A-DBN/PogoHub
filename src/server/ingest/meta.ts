@@ -35,13 +35,27 @@ export async function ingestMeta(options?: {
     ? CATEGORIES.filter((c) => options.categories!.includes(c.key))
     : CATEGORIES;
 
-  const leagues = await prisma.league.findMany({
-    where: {
-      isActive: true,
-      ...(options?.leagueKeys?.length ? { key: { in: options.leagueKeys } } : {}),
-    },
+  const scope = options?.leagueKeys?.length ? { key: { in: options.leagueKeys } } : {};
+  let leagues = await prisma.league.findMany({
+    where: { isActive: true, ...scope },
     orderBy: { sortOrder: 'asc' },
   });
+
+  /*
+   * Aucune ligue active : on repart de toutes les ligues standard.
+   *
+   * Sans ce rattrapage, une base où tout a été masqué — c'était le cas d'une
+   * base neuve avant correction de `ingestLeagues` — reste bloquée sans
+   * classement, et rien dans l'application ne permet d'en sortir. Les ligues
+   * qui reçoivent des entrées sont rallumées en fin de course.
+   */
+  const recovering = leagues.length === 0;
+  if (recovering) {
+    leagues = await prisma.league.findMany({
+      where: { tier: { not: 'CUSTOM' }, ...scope },
+      orderBy: { sortOrder: 'asc' },
+    });
+  }
 
   const pokemonIds = new Map(
     (await prisma.pokemon.findMany({ select: { id: true, speciesId: true } })).map((p) => [
@@ -129,6 +143,25 @@ export async function ingestMeta(options?: {
       where: { id: { in: empty.map((l) => l.id) } },
       data: { isActive: false },
     });
+  }
+
+  /*
+   * En rattrapage seulement, on rallume ce qui a effectivement un classement.
+   *
+   * Hors de ce cas on n'y touche pas : une ligue masquée à la main par un
+   * administrateur ne doit pas se rallumer à chaque import.
+   */
+  if (recovering) {
+    const filled = await prisma.league.findMany({
+      where: { tier: { not: 'CUSTOM' }, entries: { some: {} } },
+      select: { id: true },
+    });
+    if (filled.length) {
+      await prisma.league.updateMany({
+        where: { id: { in: filled.map((l) => l.id) } },
+        data: { isActive: true },
+      });
+    }
   }
 
   return {

@@ -42,6 +42,25 @@ pour ne jamais passer derrière une ligne de tableau.
    renvoie 200 sans avoir rien rendu du tout.
    (utile pour vérifier une page connectée en navigateur headless).
 
+## Piège du premier import : l'ordre ligues → méta
+
+`ingestLeagues` masque les ligues **sans classement**, et `ingestMeta` ne traite que les
+ligues **actives**. Sur une base neuve, aucune ligue n'a encore d'entrée quand `leagues`
+tourne : les 18 se retrouvaient éteintes, puis `meta` n'en trouvait aucune et repartait
+avec `leagues: 0, entries: 0`. Le classement restait vide **pour toujours**, sans aucun
+moyen de s'en sortir depuis l'application.
+
+Invisible en local — la base y a toujours des entrées d'un import précédent, donc le
+balayage ne trouve rien à masquer. Découvert au premier déploiement sur Neon, corrigé :
+
+- `ingestLeagues` ne balaie **que si la méta a déjà tourné** (`metaEntry.count()`) ;
+- `ingestMeta` **se rattrape** : sans ligue active, il repart de toutes les ligues
+  standard et rallume celles qui reçoivent un classement. Uniquement dans ce cas — une
+  ligue masquée à la main par un administrateur ne doit pas se rallumer à chaque import.
+
+**Leçon générale** : une étape d'ingestion ne doit pas décider de l'état d'un objet à
+partir de données qu'une étape *ultérieure* produira.
+
 ## Sources de données
 
 | Donnée | Source | Note |
