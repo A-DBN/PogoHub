@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3002",
-    "build": "prisma migrate deploy && next build",
+    "build": "node scripts/migrate-deploy.mjs && next build",
     "start": "next start -p 3002",
     "lint": "eslint",
     "test": "vitest run",
@@ -16,7 +16,8 @@
     "db:seed": "tsx scripts/seed.ts",
     "ingest": "tsx scripts/ingest.ts",
     "postinstall": "prisma generate",
-    "build:local": "next build"
+    "build:local": "next build",
+    "migrate:deploy": "node scripts/migrate-deploy.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",

@@ -642,10 +642,18 @@ exclu, `.env.example` est **gardé** (il documente les variables sans rien rév�
 | `CRON_SECRET` | idem, un autre |
 | `NEXT_PUBLIC_APP_URL` | l'URL Vercel finale (liens de partage, images OG) |
 
-**3. Les migrations tournent au build.** `package.json` a désormais
-`"build": "prisma migrate deploy && next build"` — sans quoi la base Neon resterait sans
-tables. `build:local` reste disponible pour un build sans migration. `postinstall` lance
-déjà `prisma generate`.
+**3. Les migrations tournent au build**, via `scripts/migrate-deploy.mjs` — sans quoi la
+base Neon resterait sans tables.
+
+⚠️ **Neon fait échouer `prisma migrate deploy` sur son verrou consultatif** (`P1002`,
+`pg_advisory_lock`, délai de 10 s), **même quand il n'y a rien à appliquer** : le calcul
+sort de veille et met plus de 10 s à répondre. Un build Vercel a échoué là-dessus. Le
+script désactive donc le verrou (`PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK`, documenté par
+Prisma pour ce cas) **et** réessaie trois fois — le premier essai sert de réveil.
+
+Ne pas remettre `prisma migrate deploy` en direct dans le `build`. `build:local` reste
+disponible pour compiler sans toucher à la base ; `postinstall` lance déjà
+`prisma generate`.
 
 **4. Peupler la base.** Une fois déployé, `npm run ingest` en pointant `DATABASE_URL` sur
 Neon depuis le poste local : c'est long et Vercel coupe une fonction bien avant. Ensuite
