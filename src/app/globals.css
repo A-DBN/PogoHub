@@ -1,0 +1,114 @@
+@import "tailwindcss";
+
+@theme {
+  /* fonds en couches plutôt qu'en traits */
+  --color-bg: #0b0d12;
+  --color-surface: #14171f;
+  --color-surface-2: #1a1e28;
+  --color-surface-3: #212632;
+
+  /* séparateurs très discrets */
+  --color-line: rgba(255, 255, 255, 0.06);
+  --color-line-strong: rgba(255, 255, 255, 0.11);
+
+  --color-ink: #eef1f7;
+  --color-muted: #8e99ad;
+  --color-brand: #6c8cff;
+  --color-brand-2: #a06cff;
+  --color-pvp: #ff8a5b;
+  --color-pve: #45c8dc;
+  --color-success: #35c98a;
+  --color-warn: #e8b34a;
+  --color-danger: #ff7a7a;
+  --color-shadow-badge: #a78bfa;
+
+  --font-sans: var(--font-app), ui-sans-serif, system-ui, sans-serif;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background:
+    radial-gradient(1100px 620px at 12% -8%, rgba(108, 140, 255, 0.13), transparent 60%),
+    radial-gradient(900px 520px at 92% 0%, rgba(160, 108, 255, 0.1), transparent 55%),
+    var(--color-bg);
+  background-attachment: fixed;
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  letter-spacing: -0.02em;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line-strong) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-line-strong);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+/* --- surfaces ---------------------------------------------------------- */
+
+@utility surface-card {
+  background: linear-gradient(160deg, var(--color-surface-2), var(--color-surface));
+  border: 1px solid var(--color-line);
+  border-radius: 1rem;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.04) inset,
+    0 12px 28px -18px rgba(0, 0, 0, 0.9);
+}
+
+@utility surface-soft {
+  background: var(--color-surface-2);
+  border-radius: 0.75rem;
+}
+
+/* séparateur en dégradé, beaucoup plus doux qu'un trait plein */
+@utility rule {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--color-line-strong) 12%,
+    var(--color-line-strong) 88%,
+    transparent
+  );
+}
+
+/* --- animations -------------------------------------------------------- */
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@utility pop {
+  animation: pop-in 0.14s ease-out;
+}

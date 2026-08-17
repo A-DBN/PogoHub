@@ -1,0 +1,23 @@
+# Postgres de développement pour PoGO PvP Hub.
+# Port 5433 pour ne pas entrer en conflit avec le Postgres de FoodieBack (5432).
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: pogohub-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pogohub
+      POSTGRES_PASSWORD: pogohub
+      POSTGRES_DB: pogohub
+    ports:
+      - "5433:5432"
+    volumes:
+      - pogohub-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pogohub"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pogohub-pgdata:

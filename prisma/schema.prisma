@@ -1,0 +1,608 @@
+// PoGO PvP Hub — schéma de données
+// Sources : PvPoke (gamemaster + rankings, MIT), PokeMiners (sprites + i18n),
+// LeekDuck via ScrapedDuck (actualités), pogoapi (shiny disponibles).
+
+// Prisma 7 : l'URL de connexion vit dans prisma.config.ts, le client utilise
+// l'adaptateur @prisma/adapter-pg (voir src/server/db.ts).
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------- utilisateurs
+
+enum Role {
+  USER
+  CONTRIBUTOR
+  ADMIN
+}
+
+/** Les trois équipes du jeu : Bravoure (rouge), Sagesse (bleu), Intuition (jaune). */
+enum TrainerTeam {
+  VALOR
+  MYSTIC
+  INSTINCT
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  username     String?  @unique
+  role         Role     @default(USER)
+  locale       String   @default("fr")
+
+  // profil public (/players/[username])
+  avatarUrl    String? // URL d'image ; à défaut on affiche les initiales
+  bio          String?
+  shinyPublic  Boolean  @default(false) // le Shiny Dex est privé par défaut
+  team         TrainerTeam? // Bravoure / Sagesse / Intuition, ou aucune
+  trainerLevel Int? // 1 à 80 (plafond relevé par le jeu)
+
+  /**
+   * Douze chiffres, stockés sans séparateur : la mise en forme appartient à
+   * l'affichage. Public par défaut — c'est l'usage sur les sites communautaires,
+   * un code ami ne servant à rien s'il reste caché. La bascule reste offerte
+   * dans « Mon profil », et le code n'est jamais envoyé au client quand elle est
+   * décochée.
+   */
+  friendCode       String?
+  friendCodePublic Boolean @default(true)
+
+  /** Évite de cocher « publique » à chaque création d'équipe. */
+  teamsPublicByDefault Boolean @default(false)
+
+  // ---- échanges
+  /** Accepte de recevoir des demandes d'échange. */
+  tradeOpen     Boolean @default(true)
+  /**
+   * À partir de combien d'exemplaires un chromatique rejoint la liste d'échange
+   * tout seul. `null` = jamais, chaque ajout reste manuel.
+   */
+  autoTradeFrom Int?
+  /** Mot affiché en tête de sa liste d'échange (conditions, disponibilités…). */
+  tradeNote     String?
+
+  /**
+   * Récupération de compte : trois Pokémon choisis à l'inscription.
+   *
+   * Haché comme un mot de passe, jamais stocké en clair — c'est un secret qui
+   * ouvre le compte. Le site publiant équipes et Shiny Dex, ces choix sont
+   * parfois devinables : les tentatives sont donc comptées et le compte se
+   * verrouille temporairement, sans quoi le secret céderait par force brute.
+   */
+  recoveryHash        String?
+  recoveryAttempts    Int       @default(0)
+  recoveryLockedUntil DateTime?
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  teams        Team[]
+  collection   CollectionEntry[]
+  leagues      League[]     @relation("LeagueAuthor")
+  metaEdits    MetaEntry[]  @relation("MetaEditor")
+  proposals    MetaProposal[]     @relation("ProposalAuthor")
+  proposalVotes MetaProposalVote[] @relation("ProposalVoter")
+  tradesAsked   Trade[]            @relation("TradeRequester")
+  tradesOwned   Trade[]            @relation("TradeOwner")
+
+  @@index([username])
+}
+
+// ------------------------------------------------------------------- pokémon
+
+model Pokemon {
+  id                String   @id @default(cuid())
+  speciesId         String   @unique // pvpoke: "ninetales_alolan"
+  dex               Int
+  nameEn            String
+  nameFr            String
+  form              String? // "Alolan", "Super"…
+  formFr            String?
+  isShadow          Boolean  @default(false) // entrée dédiée "…_shadow"
+  shadowEligible    Boolean  @default(false)
+  types             String[]
+  baseAtk           Int
+  baseDef           Int
+  baseHp            Int
+  tags              String[] // legendary, mythical, mega, ultrabeast, shadoweligible…
+  familyId          String?
+  parentSpeciesId   String?
+  evolutionIds      String[]
+  buddyKm           Int?
+  thirdMoveCost     Int?
+  thirdMoveStardust Int?
+  eliteMoves        String[]
+  iconFile          String // pm38.fALOLA.icon.png
+  shinyIconFile     String?
+  generation        Int
+  released          Boolean  @default(true) // présent dans Pokémon GO
+  defaultIvs        Json? // spreads « rang 1 » PvPoke par limite de PC
+  updatedAt         DateTime @updatedAt
+
+  moves       PokemonMove[]
+  metaEntries MetaEntry[]
+  teamSlots   TeamMember[]
+  collected   CollectionEntry[]
+  shiny       ShinyRelease?
+  raidBosses  RaidBoss[]
+  proposalChanges MetaProposalChange[]
+  tradesWanted    Trade[]              @relation("TradeWanted")
+  tradesOffered   Trade[]              @relation("TradeOffered")
+
+  @@index([dex])
+  @@index([nameEn])
+  @@index([nameFr])
+}
+
+enum MoveKind {
+  FAST
+  CHARGED
+}
+
+model Move {
+  id         String   @id @default(cuid())
+  moveId     String   @unique // "BODY_SLAM"
+  nameEn     String
+  nameFr     String
+  type       String
+  kind       MoveKind
+  // valeurs JcJ (PvPoke) : c'est le modèle par tours
+  power      Int      @default(0)
+  energy     Int      @default(0) // coût (charged)
+  energyGain Int      @default(0) // gain (fast)
+  turns      Int      @default(1)
+  buffs      Json?
+
+  // valeurs JcE (GAME_MASTER PokeMiners) : raids et combats Dynamax.
+  // Rien à voir avec les valeurs JcJ ci-dessus, d'où des colonnes séparées.
+  pvePower      Int? // puissance en raid
+  pveEnergy     Int? // energyDelta : négatif pour une chargée, positif pour une rapide
+  pveDurationMs Int? // animation complète
+  pveWindowMs   Int? // début de la fenêtre de dégâts (esquive)
+
+  updatedAt  DateTime @updatedAt
+
+  pokemon PokemonMove[]
+}
+
+model PokemonMove {
+  pokemonId String
+  moveId    String
+  isElite   Boolean @default(false)
+
+  pokemon Pokemon @relation(fields: [pokemonId], references: [id], onDelete: Cascade)
+  move    Move    @relation(fields: [moveId], references: [id], onDelete: Cascade)
+
+  @@id([pokemonId, moveId])
+  @@index([moveId])
+}
+
+model ShinyRelease {
+  pokemonId  String   @id
+  isReleased Boolean  @default(false)
+  sources    String[] // wild, raid, egg, research, evolution, photobomb
+  updatedAt  DateTime @updatedAt
+
+  pokemon Pokemon @relation(fields: [pokemonId], references: [id], onDelete: Cascade)
+}
+
+// -------------------------------------------------------------------- ligues
+
+enum LeagueTier {
+  MAIN
+  MINOR
+  CUSTOM
+}
+
+model League {
+  id          String     @id @default(cuid())
+  key         String     @unique // great, ultra, master, little…
+  cup         String     @default("all") // cup pvpoke associée
+  nameEn      String
+  nameFr      String
+  cpLimit     Int? // null = aucune limite (Master)
+  tier        LeagueTier @default(MINOR)
+  color       String     @default("#5b9cff")
+  icon        String?
+  rulesEn     String[]
+  rulesFr     String[]
+  filters     Json? // include/exclude pvpoke
+  sortOrder   Int        @default(100)
+  isActive    Boolean    @default(true)
+  createdById String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  createdBy User?          @relation("LeagueAuthor", fields: [createdById], references: [id])
+  entries   MetaEntry[]
+  snapshots MetaSnapshot[]
+  teams     Team[]
+  proposals MetaProposal[]
+
+  @@index([tier, sortOrder])
+}
+
+// ----------------------------------------------------------------- méta / liste
+
+enum MetaCategory {
+  OVERALL
+  LEADS
+  CLOSERS
+  SWITCHES
+  CHARGERS
+  ATTACKERS
+}
+
+enum MetaSource {
+  PVPOKE
+  GOBATTLELOG
+  MANUAL
+}
+
+// ------------------------------------------- propositions de correction méta
+
+enum ProposalStatus {
+  PENDING
+  APPLIED
+  REJECTED
+  WITHDRAWN
+}
+
+/**
+ * Nature d'un changement dans un lot. Le réordonnancement n'a pas de valeur
+ * propre : la liste est triée par rang, déplacer une ligne revient donc à
+ * modifier son rang, donc à un UPDATE.
+ */
+enum ChangeKind {
+  UPDATE
+  ADD
+  REMOVE
+}
+
+enum VoteValue {
+  APPROVE
+  REJECT
+}
+
+/**
+ * Lot de corrections proposé sur un classement, relu en bloc.
+ *
+ * Un contributeur édite la liste directement sur `/list`, puis envoie
+ * l'ensemble de ses changements en une fois : c'est ce lot que ses pairs
+ * relisent, pas chaque ligne isolément. Une fois validé, toutes les
+ * modifications sont appliquées ensemble et donnent une **nouvelle version**
+ * du classement (`MetaSnapshot`).
+ */
+model MetaProposal {
+  id        String         @id @default(cuid())
+  leagueId  String
+  category  MetaCategory   @default(OVERALL)
+  status    ProposalStatus @default(PENDING)
+  reason    String // justification du lot : c'est ce que les pairs relisent
+
+  authorId  String
+  decidedAt DateTime?
+  appliedAt DateTime?
+  /** Version née de ce lot, une fois appliqué. */
+  snapshotId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  league   League             @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  author   User               @relation("ProposalAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  snapshot MetaSnapshot?      @relation(fields: [snapshotId], references: [id], onDelete: SetNull)
+  changes  MetaProposalChange[]
+  votes    MetaProposalVote[]
+
+  @@index([status, createdAt])
+  @@index([leagueId, category])
+}
+
+/**
+ * Une ligne modifiée dans un lot. `before*` fige l'état au moment de l'édition :
+ * il sert au récapitulatif et resterait juste même si une ingestion PvPoke
+ * passait entre le dépôt et la validation.
+ */
+model MetaProposalChange {
+  id         String     @id @default(cuid())
+  proposalId String
+  pokemonId  String
+  kind       ChangeKind @default(UPDATE)
+
+  rank    Int?
+  score   Float?
+  moveset Json?
+  ivs     Json? // [niveau, atk, def, pv]
+
+  beforeRank    Int?
+  beforeScore   Float?
+  beforeMoveset Json?
+  beforeIvs     Json?
+
+  proposal MetaProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  pokemon  Pokemon      @relation(fields: [pokemonId], references: [id], onDelete: Cascade)
+
+  @@unique([proposalId, pokemonId]) // une ligne ne se corrige qu'une fois par lot
+}
+
+model MetaProposalVote {
+  proposalId String
+  userId     String
+  value      VoteValue
+  comment    String?
+  createdAt  DateTime  @default(now())
+
+  proposal MetaProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  user     User         @relation("ProposalVoter", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([proposalId, userId]) // une voix par personne et par lot
+}
+
+model MetaSnapshot {
+  id        String     @id @default(cuid())
+  leagueId  String
+  source    MetaSource @default(PVPOKE)
+  takenAt   DateTime   @default(now())
+  notes     String?
+  isCurrent Boolean    @default(true)
+
+  league    League         @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  entries   MetaEntry[]
+  proposals MetaProposal[]
+
+  @@index([leagueId, takenAt])
+}
+
+model MetaEntry {
+  id         String       @id @default(cuid())
+  leagueId   String
+  category   MetaCategory @default(OVERALL)
+  pokemonId  String
+  rank       Int
+  /**
+   * Note PvPoke, issue de leur simulation de toute la ligue contre elle-même.
+   * Nulle pour une ligne ajoutée par un contributeur : elle n'a pas été
+   * simulée, et nous ne savons pas reproduire ce calcul. Voir HANDOFF.md.
+   */
+  score      Float?
+  rating     Int?
+  moveset    Json // { fast, charged: [..] }
+  /**
+   * Spread « rang 1 » corrigé à la main : `[niveau, atk, def, pv]`.
+   * Vide, la liste retombe sur le calcul PvPoke — c'est le cas courant.
+   */
+  ivs        Json?
+  moveUses   Json? // alternatives + % d'usage
+  matchups   Json? // meilleurs matchups
+  counters   Json? // pires matchups
+  scores     Json? // scores par rôle
+  source     MetaSource   @default(PVPOKE)
+  isOverride Boolean      @default(false) // édité à la main → protégé du refresh
+  editedById String?
+  snapshotId String?
+  updatedAt  DateTime     @updatedAt
+
+  league   League        @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  pokemon  Pokemon       @relation(fields: [pokemonId], references: [id], onDelete: Cascade)
+  editedBy User?         @relation("MetaEditor", fields: [editedById], references: [id])
+  snapshot MetaSnapshot? @relation(fields: [snapshotId], references: [id], onDelete: SetNull)
+
+  @@unique([leagueId, category, pokemonId])
+  @@index([leagueId, category, rank])
+}
+
+// ------------------------------------------------------------------- équipes
+
+model Team {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  color     String   @default("#5b9cff")
+  leagueId  String?
+  notes     String?
+  isPublic  Boolean  @default(false)
+  shareSlug String   @unique @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  league  League?      @relation(fields: [leagueId], references: [id], onDelete: SetNull)
+  members TeamMember[]
+
+  @@index([userId])
+  @@index([isPublic])
+}
+
+model TeamMember {
+  id         String  @id @default(cuid())
+  teamId     String
+  slot       Int // 0..2
+  pokemonId  String
+  isShadow   Boolean @default(false)
+  isShiny    Boolean @default(false)
+  level      Float   @default(50)
+  ivAtk      Int     @default(15)
+  ivDef      Int     @default(15)
+  ivHp       Int     @default(15)
+  fastMoveId String?
+  charged1Id String?
+  charged2Id String?
+
+  team    Team    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  pokemon Pokemon @relation(fields: [pokemonId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, slot])
+}
+
+// ---------------------------------------------------------- collection / shiny
+
+model CollectionEntry {
+  userId      String
+  pokemonId   String
+  owned       Boolean   @default(false)
+  needed      Boolean   @default(false)
+  shinyCaught Boolean   @default(false)
+  shinyCount  Int       @default(0) // exemplaires possédés (doublons échangeables)
+  /**
+   * Chromatique proposé à l'échange, en trois états :
+   * `true` toujours, `false` jamais, **`null` selon la règle du compte**
+   * (`autoTradeFrom` doublons). Sans ce troisième état, retirer à la main un
+   * chromatique listé automatiquement n'aurait aucun effet.
+   */
+  forTrade    Boolean?
+  caughtAt    DateTime?
+  updatedAt   DateTime  @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pokemon Pokemon @relation(fields: [pokemonId], references: [id], onDelete: Cascade)
+
+  @@id([userId, pokemonId])
+  @@index([userId, shinyCaught])
+  @@index([userId, forTrade])
+}
+
+// -------------------------------------------------------------------- échanges
+
+/**
+ * Étapes d'un échange, dans l'ordre où elles se produisent.
+ *
+ * L'échange lui-même a lieu **dans le jeu** : le site ne fait que s'accorder
+ * dessus puis enregistrer qu'il a eu lieu. D'où les deux confirmations finales,
+ * une par joueur.
+ */
+enum TradeStatus {
+  /** Le demandeur a choisi un chromatique ; au propriétaire de choisir en retour. */
+  REQUESTED
+  /** Le propriétaire a choisi ; au demandeur de valider l'ensemble. */
+  PROPOSED
+  /** Accordé : reste à le faire en jeu, puis à le confirmer des deux côtés. */
+  ACCEPTED
+  /** Confirmé par les deux : les compteurs ont été mis à jour. */
+  COMPLETED
+  DECLINED
+  CANCELLED
+}
+
+/**
+ * Un échange de chromatiques entre deux joueurs.
+ *
+ * `wanted` est pris dans la liste du propriétaire, `offered` dans celle du
+ * demandeur : les deux colonnes ne sont donc pas interchangeables.
+ */
+model Trade {
+  id          String      @id @default(cuid())
+  requesterId String // celui qui ouvre l'échange
+  ownerId     String // celui dont la liste a été consultée
+  status      TradeStatus @default(REQUESTED)
+
+  /** Ce que le demandeur veut, choisi dans la liste du propriétaire. */
+  wantedPokemonId  String
+  /** Ce que le propriétaire veut en retour ; nul tant qu'il n'a pas choisi. */
+  offeredPokemonId String?
+
+  /**
+   * Confirmations finales, une par joueur. L'échange n'est comptabilisé que
+   * lorsque les deux sont vraies : personne ne peut clore seul.
+   */
+  requesterDone Boolean @default(false)
+  ownerDone     Boolean @default(false)
+
+  message     String?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  requester User    @relation("TradeRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  owner     User    @relation("TradeOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  wanted    Pokemon @relation("TradeWanted", fields: [wantedPokemonId], references: [id], onDelete: Cascade)
+  offered   Pokemon? @relation("TradeOffered", fields: [offeredPokemonId], references: [id], onDelete: SetNull)
+
+  @@index([requesterId, status])
+  @@index([ownerId, status])
+}
+
+// ------------------------------------------------------------------ actualités
+
+enum NewsSource {
+  LEEKDUCK
+  MANUAL
+}
+
+model NewsItem {
+  id         String     @id @default(cuid())
+  externalId String     @unique
+  source     NewsSource @default(LEEKDUCK)
+  type       String // community-day, raid-battles, event…
+  titleEn    String
+  titleFr    String?
+  image      String?
+  link       String?
+  startAt    DateTime?
+  endAt      DateTime?
+  payload    Json?
+  isPinned   Boolean    @default(false)
+  isHidden   Boolean    @default(false)
+  updatedAt  DateTime   @updatedAt
+
+  @@index([startAt])
+  @@index([endAt])
+}
+
+// ------------------------------------------------------- raids / combats Dynamax
+
+enum RaidKind {
+  RAID
+  MEGA_RAID
+  SHADOW_RAID
+  ELITE_RAID
+  MAX_BATTLE
+  GIGANTAMAX
+}
+
+model RaidBoss {
+  id             String   @id @default(cuid())
+  pokemonId      String?
+  externalName   String // nom LeekDuck (secours si l'espèce n'est pas résolue)
+  kind           RaidKind @default(RAID)
+  tier           String // "1-Star Raids", "5-Star Raids", "Mega Raids", "Max Battle"…
+  tierLevel      Int      @default(1)
+  isCurrent      Boolean  @default(false)
+  canBeShiny     Boolean  @default(false)
+  types          String[]
+  cpMin          Int?
+  cpMax          Int?
+  cpBoostedMin   Int?
+  cpBoostedMax   Int?
+  boostedWeather String[]
+  image          String?
+  startAt        DateTime?
+  endAt          DateTime?
+  sourceEventId  String?
+  updatedAt      DateTime @updatedAt
+
+  pokemon Pokemon? @relation(fields: [pokemonId], references: [id], onDelete: SetNull)
+
+  @@unique([externalName, kind, tier])
+  @@index([isCurrent, tierLevel])
+}
+
+// ------------------------------------------------------------------ ingestion
+
+model IngestRun {
+  id         String    @id @default(cuid())
+  kind       String // pokemon, leagues, meta, news, shiny
+  source     String
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  ok         Boolean   @default(false)
+  counts     Json?
+  error      String?
+
+  @@index([kind, startedAt])
+}
