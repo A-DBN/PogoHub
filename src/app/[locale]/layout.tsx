@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import { Plus_Jakarta_Sans } from 'next/font/google';
 import { notFound } from 'next/navigation';
+import { Analytics } from '@vercel/analytics/next';
+import { SpeedInsights } from '@vercel/speed-insights/next';
 import '../globals.css';
 import { getDictionary, isLocale, LOCALES } from '@/i18n';
 import { I18nProvider } from '@/i18n/client';
@@ -49,6 +51,11 @@ export default async function LocaleLayout({ children, params }: LayoutProps<'/[
             </div>
           </div>
         </I18nProvider>
+
+        {/* Mesures Vercel : en fin de body pour ne rien retarder au rendu.
+            Hors production elles ne s'activent pas d'elles-mêmes. */}
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
