@@ -5,6 +5,7 @@ import { useActionState, useState } from 'react';
 import { AlertCircle } from 'lucide-react';
 import { useT } from '@/i18n/client';
 import { Input, Label } from '@/components/ui';
+import { LogoMark } from '@/components/layout/Logo';
 import type { AuthState } from '@/server/auth/actions';
 import { RecoveryPicker, type PickedSpecies } from './RecoveryPicker';
 import { RECOVERY_PICKS } from '@/lib/pogo/recovery';
@@ -54,7 +55,7 @@ function Shell({
 
         <div className="relative">
           <div className="mb-6 flex items-center gap-3">
-            <Pokeball className="h-9 w-9 shrink-0" />
+            <LogoMark size={36} />
             <div>
               <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted">
                 {dict.app.name}

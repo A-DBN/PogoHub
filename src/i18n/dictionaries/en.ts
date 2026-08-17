@@ -2,7 +2,7 @@ import type { Dictionary } from './fr';
 
 export const en: Dictionary = {
   app: {
-    name: 'PoGO PvP Hub',
+    name: 'Stardust',
     tagline: 'PvP & PvE companion for Pokémon GO',
   },
   nav: {

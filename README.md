@@ -1,4 +1,4 @@
-# PoGO PvP Hub
+# Stardust
 
 Compagnon **PvP & PvE** pour Pokémon GO : méta par ligue, équipes, raids/Dynamax,
 Shiny Dex et actualités — bilingue FR/EN, un seul dépôt front + back.

@@ -1,4 +1,4 @@
-# PoGO PvP Hub — récapitulatif de reprise
+# Stardust — récapitulatif de reprise
 
 > À lire en début de session. Décrit l'état réel du projet, les décisions prises,
 > les pièges rencontrés et la suite à faire, dans l'ordre.

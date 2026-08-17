@@ -18,7 +18,7 @@ const appFont = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: 'PoGO PvP Hub',
+  title: 'Stardust',
   description: 'Compagnon PvP & PvE pour Pokémon GO : méta, équipes, raids, shiny dex.',
 };
 

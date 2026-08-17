@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { useT } from '@/i18n/client';
+import { LogoMark } from './Logo';
 import { cn } from '@/lib/cn';
 
 type Item = { href: string; label: string; icon: typeof LayoutDashboard };
@@ -125,9 +126,7 @@ export function Sidebar({
           href={`${base}/dashboard`}
           className="mb-6 flex items-center gap-2 px-2 text-base font-bold"
         >
-          <span className="grid h-9 w-9 place-items-center rounded-2xl bg-gradient-to-br from-brand to-brand-2 text-white shadow-[0_10px_20px_-12px_rgba(108,140,255,1)]">
-            ⚡
-          </span>
+          <LogoMark size={30} />
           {dict.app.name}
         </Link>
 

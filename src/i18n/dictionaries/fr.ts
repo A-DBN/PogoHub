@@ -1,6 +1,6 @@
 export const fr = {
   app: {
-    name: 'PoGO PvP Hub',
+    name: 'Stardust',
     tagline: 'Compagnon PvP & PvE pour Pokémon GO',
   },
   nav: {
